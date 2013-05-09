@@ -73,4 +73,5 @@ TODO: maybe work around 3.996gb barrier in pread/pwrite as well, maybe readahead
         - remove pread/pwrite emulation, as the only system that lacked them
           (cygwin) provides them for a while now.
         - provide pread/pwrite implementations for win32.
+        - implement aio_realpath for windows.
 

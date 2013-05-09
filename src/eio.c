@@ -970,8 +970,8 @@ eio__lseek (eio_req *req)
 static int
 eio__realpath (struct tmpbuf *tmpbuf, eio_wd wd, const char *path)
 {
-  const char *rel = path;
   char *res;
+  const char *rel = path;
   char *tmp1, *tmp2;
 #if SYMLOOP_MAX > 32
   int symlinks = SYMLOOP_MAX;
@@ -988,6 +988,23 @@ eio__realpath (struct tmpbuf *tmpbuf, eio_wd wd, const char *path)
     return -1;
 
   res  = tmpbuf_get (tmpbuf, PATH_MAX * 3);
+#ifdef _WIN32
+  if (_access (rel, 4) != 0)
+    return -1;
+
+  symlinks = GetFullPathName (rel, PATH_MAX * 3, res, 0);
+
+  errno = ENAMETOOLONG;
+  if (symlinks >= PATH_MAX * 3)
+    return -1;
+
+  errno = EIO;
+  if (symlinks <= 0)
+    return -1;
+
+  return symlinks;
+
+#else
   tmp1 = res  + PATH_MAX;
   tmp2 = tmp1 + PATH_MAX;
 
@@ -1120,6 +1137,7 @@ eio__realpath (struct tmpbuf *tmpbuf, eio_wd wd, const char *path)
     *res++ = '/';
 
   return res - (char *)tmpbuf->ptr;
+#endif
 }
 
 static signed char
