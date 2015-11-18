@@ -292,21 +292,7 @@ Cancel the request (and all its subrequests). If the request is currently
 executing it might still continue to execute, and in other cases it might
 still take a while till the request is cancelled.
 
-Even if cancelled, the finish callback will still be invoked - the
-callbacks of all cancellable requests need to check whether the request
-has been cancelled by calling C<EIO_CANCELLED (req)>:
-
-  static int
-  my_eio_cb (eio_req *req)
-  {
-    if (EIO_CANCELLED (req))
-      return 0;
-  }
-
-In addition, cancelled requests will I<either> have C<< req->result >>
-set to C<-1> and C<errno> to C<ECANCELED>, or I<otherwise> they were
-successfully executed, despite being cancelled (e.g. when they have
-already been executed at the time they were cancelled).
+When cancelled, the finish callback will not be invoked.
 
 C<EIO_CANCELLED> is still true for requests that have successfully
 executed, as long as C<eio_cancel> was called on them at some point.

@@ -1,7 +1,7 @@
 /*
  * libeio API header
  *
- * Copyright (c) 2007,2008,2009,2010,2011,2012 Marc Alexander Lehmann <libeio@schmorp.de>
+ * Copyright (c) 2007,2008,2009,2010,2011,2012,2015 Marc Alexander Lehmann <libeio@schmorp.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modifica-
@@ -171,8 +171,10 @@ enum
 enum
 {
   /* these MUST match the value in linux/falloc.h */
-  EIO_FALLOC_FL_KEEP_SIZE  = 1,
-  EIO_FALLOC_FL_PUNCH_HOLE = 2
+  EIO_FALLOC_FL_KEEP_SIZE      = 0x01,
+  EIO_FALLOC_FL_PUNCH_HOLE     = 0x02,
+  EIO_FALLOC_FL_COLLAPSE_RANGE = 0x08,
+  EIO_FALLOC_FL_ZERO_RANGE     = 0x10
 };
 
 /* timestamps and differences - feel free to use double in your code directly */
@@ -261,16 +263,15 @@ struct eio_req
   long int3;       /* chown, fchown: gid; rename, link: working directory of new name */
   int errorno;     /* errno value on syscall return */
 
-  signed char type;/* EIO_xxx constant ETP */
+  unsigned char flags; /* private */
 
+  signed char type;/* EIO_xxx constant ETP */
+  signed char pri;     /* the priority ETP */
 #if __i386 || __amd64
   unsigned char cancelled; /* ETP */
 #else
   sig_atomic_t  cancelled; /* ETP */
 #endif
-
-  unsigned char flags; /* private */
-  signed char pri;     /* the priority */
 
   void *data;
   eio_cb finish;
@@ -286,7 +287,6 @@ struct eio_req
 enum {
   EIO_FLAG_PTR1_FREE = 0x01, /* need to free(ptr1) */
   EIO_FLAG_PTR2_FREE = 0x02, /* need to free(ptr2) */
-  EIO_FLAG_GROUPADD  = 0x04  /* some request was added to the group */
 };
 
 /* undocumented/unsupported/private helper */
