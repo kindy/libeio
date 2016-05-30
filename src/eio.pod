@@ -106,13 +106,18 @@ have been handled. It is "edge-triggered", that is, it will only be
 called once after C<want_poll>. To put it differently, C<want_poll> and
 C<done_poll> are invoked in pairs: after C<want_poll> you have to call
 C<eio_poll ()> until either C<eio_poll> indicates that everything has been
-handled or C<done_poll> has been called, which signals the same.
+handled or C<done_poll> has been called, which signals the same - only one
+method is needed.
 
 Note that C<eio_poll> might return after C<done_poll> and C<want_poll>
 have been called again, so watch out for races in your code.
 
+It is quite common to have an empty C<done_call> callback and only use
+the return value from C<eio_poll>, or, when C<eio_poll> is configured to
+handle all outstanding replies, it's enough to call C<eio_poll> once.
+
 As with C<want_poll>, this callback is called while locks are being held,
-so you I<must not call any libeio functions form within this callback>.
+so you I<must not call any libeio functions from within this callback>.
 
 =item int eio_poll ()
 

@@ -1,7 +1,7 @@
 /*
  * libeio API header
  *
- * Copyright (c) 2007,2008,2009,2010,2011,2012,2015 Marc Alexander Lehmann <libeio@schmorp.de>
+ * Copyright (c) 2007,2008,2009,2010,2011,2012,2015,2016 Marc Alexander Lehmann <libeio@schmorp.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modifica-
@@ -187,7 +187,7 @@ enum
   EIO_WD_OPEN, EIO_WD_CLOSE,
 
   EIO_CLOSE, EIO_DUP2,
-  EIO_SEEK, EIO_READ, EIO_WRITE,
+  EIO_SEEK, EIO_READ, EIO_WRITE, EIO_FCNTL, EIO_IOCTL,
   EIO_READAHEAD, EIO_SENDFILE,
   EIO_FSTAT, EIO_FSTATVFS,
   EIO_FTRUNCATE, EIO_FUTIME, EIO_FCHMOD, EIO_FCHOWN,
@@ -253,13 +253,13 @@ struct eio_req
   eio_ssize_t result;  /* result of syscall, e.g. result = read (... */
   off_t offs;      /* read, write, truncate, readahead, sync_file_range, fallocate: file offset, mknod: dev_t */
   size_t size;     /* read, write, readahead, sendfile, msync, mlock, sync_file_range, fallocate: length */
-  void *ptr1;      /* all applicable requests: pathname, old name; readdir: optional eio_dirents */
+  void *ptr1;      /* all applicable requests: pathname, old name, readdir: optional eio_dirents */
   void *ptr2;      /* all applicable requests: new name or memory buffer; readdir: name strings */
   eio_tstamp nv1;  /* utime, futime: atime; busy: sleep time */
   eio_tstamp nv2;  /* utime, futime: mtime */
 
   int int1;        /* all applicable requests: file descriptor; sendfile: output fd; open, msync, mlockall, readdir: flags */
-  long int2;       /* chown, fchown: uid; sendfile: input fd; open, chmod, mkdir, mknod: file mode, seek: whence, sync_file_range, fallocate: flags */
+  long int2;       /* chown, fchown: uid; sendfile: input fd; open, chmod, mkdir, mknod: file mode, seek: whence, fcntl, ioctl: request, sync_file_range, fallocate: flags */
   long int3;       /* chown, fchown: gid; rename, link: working directory of new name */
   int errorno;     /* errno value on syscall return */
 
@@ -344,6 +344,8 @@ eio_req *eio_readahead (int fd, off_t offset, size_t length, int pri, eio_cb cb,
 eio_req *eio_seek      (int fd, off_t offset, int whence, int pri, eio_cb cb, void *data);
 eio_req *eio_read      (int fd, void *buf, size_t length, off_t offset, int pri, eio_cb cb, void *data);
 eio_req *eio_write     (int fd, void *buf, size_t length, off_t offset, int pri, eio_cb cb, void *data);
+eio_req *eio_fcntl     (int fd, int cmd, void *arg, int pri, eio_cb cb, void *data);
+eio_req *eio_ioctl     (int fd, unsigned long request, void *buf, int pri, eio_cb cb, void *data);
 eio_req *eio_fstat     (int fd, int pri, eio_cb cb, void *data); /* stat buffer=ptr2 allocated dynamically */
 eio_req *eio_fstatvfs  (int fd, int pri, eio_cb cb, void *data); /* stat buffer=ptr2 allocated dynamically */
 eio_req *eio_futime    (int fd, eio_tstamp atime, eio_tstamp mtime, int pri, eio_cb cb, void *data);

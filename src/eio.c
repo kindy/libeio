@@ -1,7 +1,7 @@
 /*
  * libeio implementation
  *
- * Copyright (c) 2007,2008,2009,2010,2011,2012,2013 Marc Alexander Lehmann <libeio@schmorp.de>
+ * Copyright (c) 2007,2008,2009,2010,2011,2012,2013,2016 Marc Alexander Lehmann <libeio@schmorp.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modifica-
@@ -124,6 +124,8 @@ static void eio_destroy (eio_req *req);
   #define dup2(fd1,fd2)        _dup2 (fd1, fd2)
   #define pipe(fds)            _pipe (fds, 4096, O_BINARY)
 
+  #define fcntl(fd,cmd,arg)    EIO_ENOSYS ()
+  #define ioctl(fd,cmd,arg)    EIO_ENOSYS ()
   #define fchmod(fd,mode)      EIO_ENOSYS ()
   #define chown(path,uid,gid)  EIO_ENOSYS ()
   #define fchown(fd,uid,gid)   EIO_ENOSYS ()
@@ -1818,6 +1820,9 @@ eio_execute (etp_worker *self, eio_req *req)
                                       ? pwrite    (req->int1, req->ptr2, req->size, req->offs)
                                       : write     (req->int1, req->ptr2, req->size); break;
 
+      case EIO_FCNTL:     req->result = fcntl     (req->int1, (int)          req->int2, req->ptr2); break;
+      case EIO_IOCTL:     req->result = ioctl     (req->int1, (unsigned long)req->int2, req->ptr2); break;
+
       case EIO_READAHEAD: req->result = readahead     (req->int1, req->offs, req->size); break;
       case EIO_SENDFILE:  req->result = eio__sendfile (req->int1, req->int2, req->offs, req->size); break;
 
@@ -2085,6 +2090,16 @@ eio_req *eio_read (int fd, void *buf, size_t length, off_t offset, int pri, eio_
 eio_req *eio_write (int fd, void *buf, size_t length, off_t offset, int pri, eio_cb cb, void *data)
 {
   REQ (EIO_WRITE); req->int1 = fd; req->offs = offset; req->size = length; req->ptr2 = buf; SEND;
+}
+
+eio_req *eio_fcntl (int fd, int cmd, void *arg, int pri, eio_cb cb, void *data)
+{
+  REQ (EIO_IOCTL); req->int1 = fd; req->int2 = cmd; req->ptr2 = arg; SEND;
+}
+
+eio_req *eio_ioctl (int fd, unsigned long request, void *buf, int pri, eio_cb cb, void *data)
+{
+  REQ (EIO_IOCTL); req->int1 = fd; req->int2 = request; req->ptr2 = buf; SEND;
 }
 
 eio_req *eio_fstat (int fd, int pri, eio_cb cb, void *data)
