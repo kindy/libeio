@@ -44,11 +44,6 @@
 #include "eio.h"
 #include "ecb.h"
 
-#ifdef EIO_STACKSIZE
-# define X_STACKSIZE EIO_STACKSIZE
-#endif
-#include "xthread.h"
-
 #include <errno.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -208,11 +203,15 @@ static void eio_destroy (eio_req *req);
   symlink (const char *old, const char *neu)
   {
     #if WINVER >= 0x0600
-      if (CreateSymbolicLink (neu, old, 1))
-        return 0;
+      int flags;
 
-      if (CreateSymbolicLink (neu, old, 0))
-        return 0;
+      /* This tries out all combinations of SYMBOLIC_LINK_FLAG_DIRECTORY
+       * and SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE,
+       * with directory first.
+       */
+      for (flags = 3; flags >= 0; --flags)
+        if (CreateSymbolicLink (neu, old, flags))
+          return 0;
     #endif
 
     return EIO_ERRNO (ENOENT, -1);
@@ -234,6 +233,7 @@ static void eio_destroy (eio_req *req);
 
 #else
 
+  #include <sys/ioctl.h>
   #include <sys/time.h>
   #include <sys/select.h>
   #include <unistd.h>
@@ -287,10 +287,6 @@ static void eio_destroy (eio_req *req);
 # include <sys/syscall.h>
 #endif
 
-#if HAVE_SYS_PRCTL_H
-# include <sys/prctl.h>
-#endif
-
 #if HAVE_SENDFILE
 # if __linux
 #  include <sys/sendfile.h>
@@ -304,6 +300,11 @@ static void eio_destroy (eio_req *req);
 # else
 #  error sendfile support requested but not available
 # endif
+#endif
+
+#if HAVE_RENAMEAT2
+# include <sys/syscall.h>
+# include <linux/fs.h>
 #endif
 
 #ifndef D_TYPE
@@ -323,8 +324,14 @@ static void eio_destroy (eio_req *req);
 
 /* used for readlink etc. */
 #ifndef PATH_MAX
-# define PATH_MAX 4096
+# define PATH_MAX 0
 #endif
+
+#ifndef EIO_PATH_MIN
+# define EIO_PATH_MIN 8160
+#endif
+
+#define EIO_PATH_MAX (PATH_MAX <= EIO_PATH_MIN ? EIO_PATH_MIN : PATH_MAX)
 
 /* buffer size for various temporary buffers */
 #define EIO_BUFSIZE 65536
@@ -981,15 +988,15 @@ eio__realpath (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
   if (!*rel)
     return -1;
 
-  res = etp_tmpbuf_get (tmpbuf, PATH_MAX * 3);
+  res = etp_tmpbuf_get (tmpbuf, EIO_PATH_MAX * 3);
 #ifdef _WIN32
   if (_access (rel, 4) != 0)
     return -1;
 
-  symlinks = GetFullPathName (rel, PATH_MAX * 3, res, 0);
+  symlinks = GetFullPathName (rel, EIO_PATH_MAX * 3, res, 0);
 
   errno = ENAMETOOLONG;
-  if (symlinks >= PATH_MAX * 3)
+  if (symlinks >= EIO_PATH_MAX * 3)
     return -1;
 
   errno = EIO;
@@ -999,8 +1006,8 @@ eio__realpath (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
   return symlinks;
 
 #else
-  tmp1 = res  + PATH_MAX;
-  tmp2 = tmp1 + PATH_MAX;
+  tmp1 = res  + EIO_PATH_MAX;
+  tmp2 = tmp1 + EIO_PATH_MAX;
 
 #if 0 /* disabled, the musl way to do things is just too racy */
 #if __linux && defined(O_NONBLOCK) && defined(O_NOATIME)
@@ -1011,7 +1018,7 @@ eio__realpath (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
     if (fd >= 0)
       {
         sprintf (tmp1, "/proc/self/fd/%d", fd);
-        req->result = readlink (tmp1, res, PATH_MAX);
+        req->result = readlink (tmp1, res, EIO_PATH_MAX);
         /* here we should probably stat the open file and the disk file, to make sure they still match */
         close (fd);
 
@@ -1034,7 +1041,7 @@ eio__realpath (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
       
       if (wd == EIO_CWD)
         {
-          if (!getcwd (res, PATH_MAX))
+          if (!getcwd (res, EIO_PATH_MAX))
             return -1;
 
           len = strlen (res);
@@ -1091,7 +1098,7 @@ eio__realpath (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
         res [len + 1] = 0;
 
         /* now check if it's a symlink */
-        linklen = readlink (tmpbuf->ptr, tmp1, PATH_MAX);
+        linklen = readlink (tmpbuf->ptr, tmp1, EIO_PATH_MAX);
 
         if (linklen < 0)
           {
@@ -1107,7 +1114,7 @@ eio__realpath (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
             int rellen = strlen (rel);
 
             errno = ENAMETOOLONG;
-            if (linklen + 1 + rellen >= PATH_MAX)
+            if (linklen + 1 + rellen >= EIO_PATH_MAX) /* also catch linklen >= EIO_PATH_MAX */
               return -1;
 
             errno = ELOOP;
@@ -1678,6 +1685,19 @@ eio_wd_close_sync (eio_wd wd)
 
 #if HAVE_AT
 
+static int
+eio__renameat2 (int olddirfd, const char *oldpath, int newdirfd, const char *newpath, unsigned int flags)
+{
+#if HAVE_RENAMEAT2
+  return syscall (SYS_renameat2, olddirfd, oldpath, newdirfd, newpath, flags);
+#else
+  if (flags)
+    return EIO_ENOSYS ();
+
+  return renameat (olddirfd, oldpath, newdirfd, newpath);
+#endif
+}
+
 /* they forgot these */
 
 static int
@@ -1843,17 +1863,28 @@ eio_execute (etp_worker *self, eio_req *req)
                              ? rmdir (req->wd->str)
                              : unlinkat  (dirfd, req->ptr1, AT_REMOVEDIR); break;
       case EIO_MKDIR:     req->result = mkdirat   (dirfd, req->ptr1, (mode_t)req->int2); break;
-      case EIO_RENAME:    /* complications arise because "." cannot be renamed, so we might have to expand */
-                          req->result = req->wd && SINGLEDOT (req->ptr1)
-                             ? rename (req->wd->str, req->ptr2)
-                             : renameat (dirfd, req->ptr1, WD2FD ((eio_wd)req->int3), req->ptr2); break;
+      case EIO_RENAME:    req->result = eio__renameat2 (
+                            dirfd,
+                            /* complications arise because "." cannot be renamed, so we might have to expand */
+                            req->wd && SINGLEDOT (req->ptr1) ? req->wd->str : req->ptr1,
+                            WD2FD ((eio_wd)req->int3),
+                            req->ptr2,
+                            req->int2
+                          );
+                          break;
       case EIO_LINK:      req->result = linkat    (dirfd, req->ptr1, WD2FD ((eio_wd)req->int3), req->ptr2, 0); break;
       case EIO_SYMLINK:   req->result = symlinkat (req->ptr1, dirfd, req->ptr2); break;
       case EIO_MKNOD:     req->result = mknodat   (dirfd, req->ptr1, (mode_t)req->int2, (dev_t)req->offs); break;
-      case EIO_READLINK:  ALLOC (PATH_MAX);
-                          req->result = readlinkat (dirfd, req->ptr1, req->ptr2, PATH_MAX); break;
       case EIO_STATVFS:   ALLOC (sizeof (EIO_STRUCT_STATVFS));
                           req->result = eio__statvfsat (dirfd, req->ptr1, (EIO_STRUCT_STATVFS *)req->ptr2); break;
+      case EIO_READLINK:  ALLOC (EIO_PATH_MAX);
+                          req->result = readlinkat (dirfd, req->ptr1, req->ptr2, EIO_PATH_MAX);
+                          if (req->result == EIO_PATH_MAX)
+                            {
+                              req->result = -1;
+                              errno = ENAMETOOLONG;
+                            }
+                          break;
       case EIO_UTIME:
       case EIO_FUTIME:
         {
@@ -1892,14 +1923,20 @@ eio_execute (etp_worker *self, eio_req *req)
       case EIO_UNLINK:    req->result = unlink    (path     ); break;
       case EIO_RMDIR:     req->result = rmdir     (path     ); break;
       case EIO_MKDIR:     req->result = mkdir     (path     , (mode_t)req->int2); break;
-      case EIO_RENAME:    req->result = rename    (path     , req->ptr2); break;
+      case EIO_RENAME:    req->result = req->int2 ? EIO_ENOSYS () : rename (path, req->ptr2); break;
       case EIO_LINK:      req->result = link      (path     , req->ptr2); break;
       case EIO_SYMLINK:   req->result = symlink   (path     , req->ptr2); break;
       case EIO_MKNOD:     req->result = mknod     (path     , (mode_t)req->int2, (dev_t)req->offs); break;
-      case EIO_READLINK:  ALLOC (PATH_MAX);
-                          req->result = readlink  (path, req->ptr2, PATH_MAX); break;
       case EIO_STATVFS:   ALLOC (sizeof (EIO_STRUCT_STATVFS));
                           req->result = statvfs   (path     , (EIO_STRUCT_STATVFS *)req->ptr2); break;
+      case EIO_READLINK:  ALLOC (EIO_PATH_MAX);
+                          req->result = readlink (path, req->ptr2, EIO_PATH_MAX);
+                          if (req->result == EIO_PATH_MAX)
+                            {
+                              req->result = -1;
+                              errno = ENAMETOOLONG;
+                            }
+                          break;
 
       case EIO_UTIME:
       case EIO_FUTIME:

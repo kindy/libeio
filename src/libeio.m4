@@ -81,7 +81,7 @@ int main (void)
    size_t count = 2;
    ssize_t res;
 #if __linux
-   res = sendfile (fd, fd, offset, count);
+   res = sendfile (fd, fd, &offset, count);
 #elif __FreeBSD__
    res = sendfile (fd, fd, offset, count, 0, &offset, 0);
 #elif __hpux
@@ -136,7 +136,7 @@ AC_CACHE_CHECK(for prctl_set_name, ac_cv_prctl_set_name, [AC_LINK_IFELSE([AC_LAN
 #include <sys/prctl.h>
 int main (void)
 {
-  char name[] = "test123";
+  char *name = "test123";
   int res = prctl (PR_SET_NAME, (unsigned long)name, 0, 0, 0);
 }
 ])],ac_cv_prctl_set_name=yes,ac_cv_prctl_set_name=no)])
@@ -144,6 +144,21 @@ test $ac_cv_prctl_set_name = yes && AC_DEFINE(HAVE_PRCTL_SET_NAME, 1, prctl(PR_S
 
 dnl #############################################################################
 dnl # these checks exist for the benefit of IO::AIO
+
+AC_CACHE_CHECK(for set/getrlimit, ac_cv_rlimits, [AC_LINK_IFELSE([AC_LANG_SOURCE([[
+#include <sys/time.h>
+#include <sys/resource.h>
+int res;
+int main (void)
+{
+   struct rlimit srl;
+   srl.rlim_cur = srl.rlim_max = RLIM_INFINITY;
+   res = getrlimit (RLIMIT_NOFILE, &srl);
+   res = setrlimit (RLIMIT_NOFILE, &srl);
+   return 0;
+}
+]])],ac_cv_rlimits=yes,ac_cv_rlimits=no)])
+test $ac_cv_rlimits = yes && AC_DEFINE(HAVE_RLIMITS, 1, setrlimit/getrlimit is available)
 
 dnl at least uclibc defines _POSIX_ADVISORY_INFO without *any* of the required
 dnl functionality actually being present. ugh.
@@ -204,4 +219,31 @@ int main (void)
 }
 ]])],ac_cv_pipe2=yes,ac_cv_pipe2=no)])
 test $ac_cv_pipe2 = yes && AC_DEFINE(HAVE_PIPE2, 1, pipe2(2) is available)
+
+AC_CACHE_CHECK(for renameat2, ac_cv_renameat2, [AC_LINK_IFELSE([AC_LANG_SOURCE([[
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <linux/fs.h>
+int res;
+int main (void)
+{
+   res = syscall (SYS_renameat2, 0, 0, 0, 0, RENAME_EXCHANGE | RENAME_NOREPLACE);
+   return 0;
+}
+]])],ac_cv_renameat2=yes,ac_cv_renameat2=no)])
+test $ac_cv_renameat2 = yes && AC_DEFINE(HAVE_RENAMEAT2, 1, renameat2(2) is available)
+
+AC_CACHE_CHECK(for copy_file_range, ac_cv_copy_file_range, [AC_LINK_IFELSE([AC_LANG_SOURCE([[
+#include <unistd.h>
+#include <sys/syscall.h>
+/*#include <linux/copy.h>*/
+int res;
+int main (void)
+{
+   /*res = syscall (SYS_copy_file_range, 0, 0, 0, 0, 0, COPY_FR_REFLINK | COPY_FR_DEDUP | COPY_FR_COPY);*/
+   res = syscall (SYS_copy_file_range, 0, 0, 0, 0, 0, 0);
+   return 0;
+}
+]])],ac_cv_copy_file_range=yes,ac_cv_copy_file_range=no)])
+test $ac_cv_copy_file_range = yes && AC_DEFINE(HAVE_COPY_FILE_RANGE, 1, copy_file_range(2) is available)
 

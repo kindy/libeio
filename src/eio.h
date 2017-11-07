@@ -174,7 +174,18 @@ enum
   EIO_FALLOC_FL_KEEP_SIZE      = 0x01,
   EIO_FALLOC_FL_PUNCH_HOLE     = 0x02,
   EIO_FALLOC_FL_COLLAPSE_RANGE = 0x08,
-  EIO_FALLOC_FL_ZERO_RANGE     = 0x10
+  EIO_FALLOC_FL_ZERO_RANGE     = 0x10,
+  EIO_FALLOC_FL_INSERT_RANGE   = 0x20,
+  EIO_FALLOC_FL_UNSHARE_RANGE  = 0x40
+};
+
+/* eio_rename flags */
+enum
+{
+  /* these MUST match the value in linux/fs.h */
+  EIO_RENAME_NOREPLACE = 1 << 0,
+  EIO_RENAME_EXCHANGE  = 1 << 1,
+  EIO_RENAME_WHITEOUT  = 1 << 2
 };
 
 /* timestamps and differences - feel free to use double in your code directly */
@@ -259,7 +270,7 @@ struct eio_req
   eio_tstamp nv2;  /* utime, futime: mtime */
 
   int int1;        /* all applicable requests: file descriptor; sendfile: output fd; open, msync, mlockall, readdir: flags */
-  long int2;       /* chown, fchown: uid; sendfile: input fd; open, chmod, mkdir, mknod: file mode, seek: whence, fcntl, ioctl: request, sync_file_range, fallocate: flags */
+  long int2;       /* chown, fchown: uid; sendfile: input fd; open, chmod, mkdir, mknod: file mode, seek: whence, fcntl, ioctl: request, sync_file_range, fallocate, rename: flags */
   long int3;       /* chown, fchown: gid; rename, link: working directory of new name */
   int errorno;     /* errno value on syscall return */
 
@@ -323,6 +334,7 @@ unsigned int eio_nthreads (void); /* number of worker threads in use currently *
 
 /*****************************************************************************/
 /* convenience wrappers */
+/* these do not expose advanced syscalls and directory fds */
 
 #ifndef EIO_NO_WRAPPERS
 eio_req *eio_wd_open   (const char *path, int pri, eio_cb cb, void *data); /* result=wd */
