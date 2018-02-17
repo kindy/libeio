@@ -247,3 +247,14 @@ int main (void)
 ]])],ac_cv_copy_file_range=yes,ac_cv_copy_file_range=no)])
 test $ac_cv_copy_file_range = yes && AC_DEFINE(HAVE_COPY_FILE_RANGE, 1, copy_file_range(2) is available)
 
+AC_CACHE_CHECK(for posix_close, ac_cv_posix_close, [AC_LINK_IFELSE([AC_LANG_SOURCE([[
+#include <unistd.h>
+int res;
+int main (void)
+{
+   res = posix_close (0, 0); /* we do not need any flags */
+   return 0;
+}
+]])],ac_cv_posix_close=yes,ac_cv_posix_close=no)])
+test $ac_cv_posix_close = yes && AC_DEFINE(HAVE_POSIX_CLOSE, 1, posix_close(2) is available)
+

@@ -1,7 +1,7 @@
 /*
  * libeio API header
  *
- * Copyright (c) 2007,2008,2009,2010,2011,2012,2015,2016 Marc Alexander Lehmann <libeio@schmorp.de>
+ * Copyright (c) 2007,2008,2009,2010,2011,2012,2015,2016,2017 Marc Alexander Lehmann <libeio@schmorp.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modifica-
@@ -222,6 +222,7 @@ enum
   EIO_UNLINK, EIO_RMDIR, EIO_MKDIR, EIO_RENAME,
   EIO_MKNOD,
   EIO_LINK, EIO_SYMLINK, EIO_READLINK,
+  EIO_SLURP, /* open + read + close */
 
   EIO_REQ_TYPE_NUM
 };
@@ -262,8 +263,8 @@ struct eio_req
   eio_wd wd;       /* all applicable requests: working directory of pathname, old name; wd_open: return wd */
 
   eio_ssize_t result;  /* result of syscall, e.g. result = read (... */
-  off_t offs;      /* read, write, truncate, readahead, sync_file_range, fallocate: file offset, mknod: dev_t */
-  size_t size;     /* read, write, readahead, sendfile, msync, mlock, sync_file_range, fallocate: length */
+  off_t offs;      /* read, write, truncate, readahead, sync_file_range, fallocate, slurp: file offset, mknod: dev_t */
+  size_t size;     /* read, write, readahead, sendfile, msync, mlock, sync_file_range, fallocate, slurp: length */
   void *ptr1;      /* all applicable requests: pathname, old name, readdir: optional eio_dirents */
   void *ptr2;      /* all applicable requests: new name or memory buffer; readdir: name strings */
   eio_tstamp nv1;  /* utime, futime: atime; busy: sleep time */
@@ -384,6 +385,7 @@ eio_req *eio_mknod     (const char *path, mode_t mode, dev_t dev, int pri, eio_c
 eio_req *eio_link      (const char *path, const char *new_path, int pri, eio_cb cb, void *data);
 eio_req *eio_symlink   (const char *path, const char *new_path, int pri, eio_cb cb, void *data);
 eio_req *eio_rename    (const char *path, const char *new_path, int pri, eio_cb cb, void *data);
+eio_req *eio_slurp     (const char *path, void *buf, size_t length, off_t offset, int pri, eio_cb cb, void *data);
 eio_req *eio_custom    (void (*execute)(eio_req *), int pri, eio_cb cb, void *data);
 #endif
 

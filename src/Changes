@@ -84,5 +84,9 @@ TODO: maybe work around 3.996gb barrier in pread/pwrite as well, maybe readahead
         - generate ENAMETOOLONG if readlink overflow is detected.
         - implement support for renameat2, and corresponding flags.
         - add EIO_FALLOC_FL_INSERT_RANGE and EIO_FALLOC_FL_UNSHARE_RANGE.
+        - use posix_close if available or needed.
+        - save errno around close in ftruncateat, fstatvfsat and EIO_CLOSE.
+        - add EIO_SLURP convenience request.
+        - update configure.ac for newer autoconf/automake.
 
 

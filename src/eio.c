@@ -1,7 +1,7 @@
 /*
  * libeio implementation
  *
- * Copyright (c) 2007,2008,2009,2010,2011,2012,2013,2016 Marc Alexander Lehmann <libeio@schmorp.de>
+ * Copyright (c) 2007,2008,2009,2010,2011,2012,2013,2016,2017 Marc Alexander Lehmann <libeio@schmorp.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modifica-
@@ -555,6 +555,21 @@ int eio_poll (void)
 /*****************************************************************************/
 /* work around various missing functions */
 
+#if HAVE_POSIX_CLOSE && !__linux
+# define eio__close(fd) posix_close (fd, 0)
+#else
+# define eio__close(fd) close (fd)
+#endif
+
+/* close() without disturbing errno */
+static void
+silent_close (int fd)
+{
+  int saved_errno = errno;
+  eio__close (fd);
+  errno = saved_errno;
+}
+
 #ifndef HAVE_UTIMES
 
 # undef utimes
@@ -1020,7 +1035,7 @@ eio__realpath (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
         sprintf (tmp1, "/proc/self/fd/%d", fd);
         req->result = readlink (tmp1, res, EIO_PATH_MAX);
         /* here we should probably stat the open file and the disk file, to make sure they still match */
-        close (fd);
+        eio__close (fd);
 
         if (req->result > 0)
           goto done;
@@ -1388,7 +1403,7 @@ eio__scandir (eio_req *req, etp_worker *self)
         dirp = fdopendir (fd);
 
         if (!dirp)
-          close (fd);
+          silent_close (fd);
       }
     else
       dirp = opendir (req->ptr1);
@@ -1677,7 +1692,7 @@ eio_wd_close_sync (eio_wd wd)
   if (wd != EIO_INVALID_WD && wd != EIO_CWD)
     {
       #if HAVE_AT
-      close (wd->fd);
+      eio__close (wd->fd);
       #endif
       free (wd);
     }
@@ -1710,7 +1725,7 @@ eio__truncateat (int dirfd, const char *path, off_t length)
     return fd;
 
   res = ftruncate (fd, length);
-  close (fd);
+  silent_close (fd);
   return res;
 }
 
@@ -1724,9 +1739,8 @@ eio__statvfsat (int dirfd, const char *path, struct statvfs *buf)
     return fd;
 
   res = fstatvfs (fd, buf);
-  close (fd);
+  silent_close (fd);
   return res;
-
 }
 
 #endif
@@ -1744,11 +1758,39 @@ eio__statvfsat (int dirfd, const char *path, struct statvfs *buf)
         {					\
           errno       = ENOMEM;			\
           req->result = -1;			\
-          break;				\
+          goto alloc_fail;			\
         }					\
     }
 
 /*****************************************************************************/
+
+static void
+eio__slurp (int fd, eio_req *req)
+{
+  req->result = fd;
+
+  if (fd < 0)
+    return;
+
+  if (req->offs < 0 || !req->size) /* do we need the size? */
+    {
+      off_t size = lseek (fd, 0, SEEK_END);
+
+      if (req->offs < 0)
+        req->offs += size;
+
+      if (!req->size)
+        req->size = size - req->offs;
+    }
+
+  ALLOC (req->size);
+  req->result = pread (fd, req->ptr2, req->size, req->offs);
+
+  silent_close (fd);
+
+alloc_fail:
+  ;
+}
 
 int ecb_cold
 eio_init (void (*want_poll)(void), void (*done_poll)(void))
@@ -1856,6 +1898,7 @@ eio_execute (etp_worker *self, eio_req *req)
       case EIO_CHMOD:     req->result = fchmodat  (dirfd, req->ptr1, (mode_t)req->int2, 0); break;
       case EIO_TRUNCATE:  req->result = eio__truncateat (dirfd, req->ptr1, req->offs); break;
       case EIO_OPEN:      req->result = openat    (dirfd, req->ptr1, req->int1, (mode_t)req->int2); break;
+      case EIO_SLURP:     eio__slurp (  openat    (dirfd, req->ptr1, O_RDONLY | O_CLOEXEC), req); break;
 
       case EIO_UNLINK:    req->result = unlinkat  (dirfd, req->ptr1, 0); break;
       case EIO_RMDIR:     /* complications arise because "." cannot be removed, so we might have to expand */
@@ -1919,6 +1962,7 @@ eio_execute (etp_worker *self, eio_req *req)
       case EIO_CHMOD:     req->result = chmod     (path     , (mode_t)req->int2); break;
       case EIO_TRUNCATE:  req->result = truncate  (path     , req->offs); break;
       case EIO_OPEN:      req->result = open      (path     , req->int1, (mode_t)req->int2); break;
+      case EIO_SLURP:     eio__slurp (  open      (path     , O_RDONLY | O_CLOEXEC), req); break;
 
       case EIO_UNLINK:    req->result = unlink    (path     ); break;
       case EIO_RMDIR:     req->result = rmdir     (path     ); break;
@@ -1981,7 +2025,7 @@ eio_execute (etp_worker *self, eio_req *req)
       case EIO_FCHMOD:    req->result = fchmod    (req->int1, (mode_t)req->int2); break;
       case EIO_FTRUNCATE: req->result = ftruncate (req->int1, req->offs); break;
 
-      case EIO_CLOSE:     req->result = close     (req->int1); break;
+      case EIO_CLOSE:     req->result = eio__close (req->int1); break;
       case EIO_DUP2:      req->result = dup2      (req->int1, req->int2); break;
       case EIO_SYNC:      req->result = 0; sync (); break;
       case EIO_FSYNC:     req->result = fsync     (req->int1); break;
@@ -2029,6 +2073,7 @@ eio_execute (etp_worker *self, eio_req *req)
         break;
     }
 
+alloc_fail:
   req->errorno = errno;
 }
 
@@ -2289,6 +2334,11 @@ eio_req *eio_symlink (const char *path, const char *new_path, int pri, eio_cb cb
 eio_req *eio_rename (const char *path, const char *new_path, int pri, eio_cb cb, void *data)
 {
   return eio__2path (EIO_RENAME, path, new_path, pri, cb, data);
+}
+
+eio_req *eio_slurp (const char *path, void *buf, ssize_t length, off_t offset, int pri, eio_cb cb, void *data)
+{
+  REQ (EIO_SLURP); PATH; req->offs = offset; req->size = length; req->ptr2 = buf; SEND;
 }
 
 eio_req *eio_custom (void (*execute)(eio_req *), int pri, eio_cb cb, void *data)
