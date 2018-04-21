@@ -7,6 +7,7 @@ TODO: make mtouch/readdir maybe others cancellable in-request
 TODO: fadvise request
 TODO: fdopendir/utimensat
 TODO: maybe work around 3.996gb barrier in pread/pwrite as well, maybe readahead etc.?
+TODO: pthread_condattr_setclock(..., CLOCK_MONOTONIC) and clock_gettime(CLOCK_MONOTONIC) instead of defualt CLOCK_REALTIME timeouts
 1.0
 	- for simple request api, initialise result/errorno to -1/ECANCELED.
 	- fix a deadlock where a wakeup signal could be missed when

@@ -220,6 +220,31 @@ int main (void)
 ]])],ac_cv_pipe2=yes,ac_cv_pipe2=no)])
 test $ac_cv_pipe2 = yes && AC_DEFINE(HAVE_PIPE2, 1, pipe2(2) is available)
 
+AC_CACHE_CHECK(for eventfd, ac_cv_eventfd, [AC_LINK_IFELSE([AC_LANG_SOURCE([[
+#include <sys/eventfd.h>
+int res;
+int main (void)
+{
+   res = eventfd (1, EFD_CLOEXEC | EFD_NONBLOCK);
+   return 0;
+}
+]])],ac_cv_eventfd=yes,ac_cv_eventfd=no)])
+test $ac_cv_eventfd = yes && AC_DEFINE(HAVE_EVENTFD, 1, eventfd(2) is available)
+
+AC_CACHE_CHECK(for timerfd, ac_cv_timerfd, [AC_LINK_IFELSE([AC_LANG_SOURCE([[
+#include <sys/timerfd.h>
+int res;
+int main (void)
+{
+   struct itimerspec its;
+   res = timerfd_create (CLOCK_REALTIME, TFD_CLOEXEC | TFD_NONBLOCK);
+   res = timerfd_settime (res, TFD_TIMER_ABSTIME /*| TFD_TIMER_CANCEL_ON_SET*/, &its, 0);
+   res = timerfd_gettime (res, &its);
+   return 0;
+}
+]])],ac_cv_timerfd=yes,ac_cv_timerfd=no)])
+test $ac_cv_timerfd = yes && AC_DEFINE(HAVE_TIMERFD, 1, timerfd_*(2) are available)
+
 AC_CACHE_CHECK(for renameat2, ac_cv_renameat2, [AC_LINK_IFELSE([AC_LANG_SOURCE([[
 #include <unistd.h>
 #include <sys/syscall.h>
