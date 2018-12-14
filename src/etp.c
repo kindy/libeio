@@ -320,7 +320,7 @@ etp_proc_init (void)
 {
 #if HAVE_PRCTL_SET_NAME
   /* provide a more sensible "thread name" */
-  char name[15 + 1];
+  char name[16 + 1];
   const int namelen = sizeof (name) - 1;
   int len;
 

@@ -1,7 +1,7 @@
 /*
  * libeio implementation
  *
- * Copyright (c) 2007,2008,2009,2010,2011,2012,2013,2016,2017 Marc Alexander Lehmann <libeio@schmorp.de>
+ * Copyright (c) 2007,2008,2009,2010,2011,2012,2013,2016,2017,2018 Marc Alexander Lehmann <libeio@schmorp.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modifica-
@@ -331,6 +331,18 @@ static void eio_destroy (eio_req *req);
   #define O_CLOEXEC 0
 #endif
 
+#ifndef O_NONBLOCK
+  #define O_NONBLOCK 0
+#endif
+
+#ifndef O_SEARCH
+  #define O_SEARCH O_RDONLY
+#endif
+
+#ifndef O_DIRECTORY
+  #define O_DIRECTORY 0
+#endif
+
 #ifndef EIO_PATH_MIN
 # define EIO_PATH_MIN 8160
 #endif
@@ -356,9 +368,6 @@ struct etp_tmpbuf;
 #if _POSIX_VERSION >= 200809L
   #define HAVE_AT 1
   #define WD2FD(wd) ((wd) ? (wd)->fd : AT_FDCWD)
-  #ifndef O_SEARCH
-    #define O_SEARCH O_RDONLY
-  #endif
 #else
   #define HAVE_AT 0
   static const char *wd_expand (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path);
@@ -895,12 +904,21 @@ eio__mlockall (int flags)
     mallopt (-6, 238); /* http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=473812 */
   #endif
 
-  if (EIO_MCL_CURRENT   != MCL_CURRENT
-      || EIO_MCL_FUTURE != MCL_FUTURE)
+  #ifndef MCL_ONFAULT
+    if (flags & EIO_MCL_ONFAULT)
+      return EIO_ERRNO (EINVAL, -1);
+    #define MCL_ONFAULT 4
+  #endif
+
+  if (EIO_MCL_CURRENT     != MCL_CURRENT
+      || EIO_MCL_FUTURE   != MCL_FUTURE
+      || EIO_MCL_ONFAULT  != MCL_ONFAULT)
     {
       flags = 0
          | (flags & EIO_MCL_CURRENT ? MCL_CURRENT : 0)
-         | (flags & EIO_MCL_FUTURE  ? MCL_FUTURE : 0);
+         | (flags & EIO_MCL_FUTURE  ? MCL_FUTURE  : 0)
+         | (flags & EIO_MCL_ONFAULT ? MCL_ONFAULT : 0)
+      ;
     }
 
   return mlockall (flags);
@@ -961,9 +979,9 @@ eio__mtouch (eio_req *req)
 
     if (addr < end)
       if (flags & EIO_MT_MODIFY) /* modify */
-        do { *((volatile sig_atomic_t *)addr) |= 0; } while ((addr += page) < len && !EIO_CANCELLED (req));
+        do { *((volatile sig_atomic_t *)addr) |= 0; } while ((addr += page) < end && !EIO_CANCELLED (req));
       else
-        do { *((volatile sig_atomic_t *)addr)     ; } while ((addr += page) < len && !EIO_CANCELLED (req));
+        do { *((volatile sig_atomic_t *)addr)     ; } while ((addr += page) < end && !EIO_CANCELLED (req));
   }
 
   return 0;
@@ -1397,26 +1415,26 @@ eio__scandir (eio_req *req, etp_worker *self)
   }
 #else
   #if HAVE_AT
-    if (req->wd)
-      {
-        int fd = openat (WD2FD (req->wd), req->ptr1, O_CLOEXEC | O_SEARCH | O_DIRECTORY);
+    {
+      int fd = openat (WD2FD (req->wd), req->ptr1, O_CLOEXEC | O_SEARCH | O_DIRECTORY | O_NONBLOCK);
 
-        if (fd < 0)
-          return;
+      if (fd < 0)
+        return;
 
-        dirp = fdopendir (fd);
+      dirp = fdopendir (fd);
 
-        if (!dirp)
+      if (!dirp)
+        {
           silent_close (fd);
-      }
-    else
-      dirp = opendir (req->ptr1);
+          return;
+        }
+    }
   #else
     dirp = opendir (wd_expand (&self->tmpbuf, req->wd, req->ptr1));
-  #endif
 
-  if (!dirp)
-    return;
+    if (!dirp)
+      return;
+  #endif
 #endif
 
   if (req->flags & EIO_FLAG_PTR1_FREE)
@@ -1661,7 +1679,7 @@ eio__wd_open_sync (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
     return EIO_INVALID_WD;
 
 #if HAVE_AT
-  fd = openat (WD2FD (wd), path, O_CLOEXEC | O_SEARCH | O_DIRECTORY);
+  fd = openat (WD2FD (wd), path, O_CLOEXEC | O_SEARCH | O_DIRECTORY | O_NONBLOCK);
 
   if (fd < 0)
     return EIO_INVALID_WD;
@@ -1683,7 +1701,7 @@ eio__wd_open_sync (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
 eio_wd
 eio_wd_open_sync (eio_wd wd, const char *path)
 {
-  struct etp_tmpbuf tmpbuf = { };
+  struct etp_tmpbuf tmpbuf = { 0 };
   wd = eio__wd_open_sync (&tmpbuf, wd, path);
   free (tmpbuf.ptr);
 
@@ -1722,7 +1740,7 @@ eio__renameat2 (int olddirfd, const char *oldpath, int newdirfd, const char *new
 static int
 eio__truncateat (int dirfd, const char *path, off_t length)
 {
-  int fd = openat (dirfd, path, O_WRONLY | O_CLOEXEC);
+  int fd = openat (dirfd, path, O_WRONLY | O_CLOEXEC | O_NONBLOCK);
   int res;
 
   if (fd < 0)
@@ -1736,7 +1754,7 @@ eio__truncateat (int dirfd, const char *path, off_t length)
 static int
 eio__statvfsat (int dirfd, const char *path, struct statvfs *buf)
 {
-  int fd = openat (dirfd, path, O_SEARCH | O_CLOEXEC);
+  int fd = openat (dirfd, path, O_SEARCH | O_CLOEXEC | O_NONBLOCK);
   int res;
 
   if (fd < 0)
@@ -2409,5 +2427,10 @@ eio_ssize_t
 eio_sendfile_sync (int ofd, int ifd, off_t offset, size_t count)
 {
   return eio__sendfile (ofd, ifd, offset, count);
+}
+
+int eio_mlockall_sync (int flags)
+{
+  return eio__mlockall (flags);
 }
 

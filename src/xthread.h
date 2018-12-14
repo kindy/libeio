@@ -18,7 +18,9 @@
 #ifdef _WIN32
 
 //#define NTDDI_VERSION NTDDI_WIN2K // needed to get win2000 api calls, fails with mingw
-#define _WIN32_WINNT 0x400 // maybe working alternative for mingw
+#if _WIN32_WINNT < 0x400
+# define _WIN32_WINNT 0x400 // maybe working alternative for mingw
+#endif
 #include <stdio.h>//D
 #include <fcntl.h>
 #include <io.h>
@@ -33,11 +35,13 @@
 #endif
 
 #include <pthread.h>
-#define sigset_t int
-#define sigfillset(a)
-#define pthread_sigmask(a,b,c)
-#define sigaddset(a,b)
-#define sigemptyset(s)
+#ifndef pthread_sigmask
+# define sigset_t int
+# define sigfillset(a)
+# define pthread_sigmask(a,b,c)
+# define sigaddset(a,b)
+# define sigemptyset(s)
+#endif
 
 typedef pthread_mutex_t xmutex_t;
 #define X_MUTEX_INIT           PTHREAD_MUTEX_INITIALIZER
@@ -60,6 +64,7 @@ static int
 xthread_create (xthread_t *tid, void *(*proc)(void *), void *arg)
 {
   int retval;
+#if 0
   pthread_attr_t attr;
 
   pthread_attr_init (&attr);
@@ -68,6 +73,12 @@ xthread_create (xthread_t *tid, void *(*proc)(void *), void *arg)
   retval = pthread_create (tid, &attr, proc, arg) == 0;
 
   pthread_attr_destroy (&attr);
+#else
+  retval = pthread_create (tid, 0, proc, arg) == 0;
+
+  if (retval)
+    pthread_detach (*tid);
+#endif
 
   return retval;
 }

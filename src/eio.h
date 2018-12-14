@@ -242,7 +242,8 @@ enum
 enum
 {
   EIO_MCL_CURRENT = 1,
-  EIO_MCL_FUTURE  = 2
+  EIO_MCL_FUTURE  = 2,
+  EIO_MCL_ONFAULT = 4
 };
 
 /* request priorities */
@@ -420,6 +421,7 @@ void eio_cancel (eio_req *req);
 /* convenience functions */
 
 eio_ssize_t eio_sendfile_sync (int ofd, int ifd, off_t offset, size_t count);
+int eio_mlockall_sync (int flags);
 
 #ifdef __cplusplus
 }
