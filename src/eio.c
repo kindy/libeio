@@ -1,7 +1,7 @@
 /*
  * libeio implementation
  *
- * Copyright (c) 2007,2008,2009,2010,2011,2012,2013,2016,2017,2018 Marc Alexander Lehmann <libeio@schmorp.de>
+ * Copyright (c) 2007,2008,2009,2010,2011,2012,2013,2016,2017,2018,2019 Marc Alexander Lehmann <libeio@schmorp.de>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modifica-
@@ -1680,6 +1680,20 @@ eio__wd_open_sync (struct etp_tmpbuf *tmpbuf, eio_wd wd, const char *path)
 
 #if HAVE_AT
   fd = openat (WD2FD (wd), path, O_CLOEXEC | O_SEARCH | O_DIRECTORY | O_NONBLOCK);
+
+  /* 0 is a valid fd, but we use it for EIO_CWD, so in the very unlikely */
+  /* case of fd 0 being available (almost certainly an a pplication bug) */
+  /* make sure we use another fd value */
+  #if EIO_CWD
+    error EIO_CWD must be 0
+  #endif
+  if (ecb_expect_false (fd == 0))
+    {
+      int fd2 = fcntl (fd, F_DUPFD_CLOEXEC ? F_DUPFD_CLOEXEC : F_DUPFD);
+      fcntl (fd2, F_SETFD, FD_CLOEXEC);
+      eio__close (fd);
+      fd = fd2;
+    }
 
   if (fd < 0)
     return EIO_INVALID_WD;

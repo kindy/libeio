@@ -1,4 +1,4 @@
-Changes:1.65
+Changes:1.67
 LICENSE:1.1
 Makefile.am:1.4
 aclocal.m4:1.3
@@ -7,9 +7,9 @@ configure.ac:1.11
 demo.c:1.4
 ecb.h:1.28
 eio.3:1.1
-eio.c:1.157
+eio.c:1.158
 eio.h:1.63
 eio.pod:1.36
 etp.c:1.14
-libeio.m4:1.32
+libeio.m4:1.33
 xthread.h:1.19

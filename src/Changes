@@ -93,5 +93,8 @@ TODO: pthread_condattr_setclock(..., CLOCK_MONOTONIC) and clock_gettime(CLOCK_MO
         - use O_NONBLOCK when opening directories and in truncateat and statvfsat.
         - add EIO_MCL_ONFAULT.
         - add eio_mlockall_sync.
+        - fix configure tests for readahead and sync_file_range, they were based on the
+          manpages, which turned out to be wrong.
+        - protect wd_open against fd being 0, which is used for the value of EIO_CWD.
 
 

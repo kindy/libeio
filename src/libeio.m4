@@ -39,6 +39,7 @@ int main (void)
 test $ac_cv_futimes = yes && AC_DEFINE(HAVE_FUTIMES, 1, futimes(2) is available)
 
 AC_CACHE_CHECK(for readahead, ac_cv_readahead, [AC_LINK_IFELSE([AC_LANG_SOURCE([
+#include <sys/types.h>
 #include <fcntl.h>
 int main (void)
 {
@@ -93,6 +94,7 @@ int main (void)
 test $ac_cv_sendfile = yes && AC_DEFINE(HAVE_SENDFILE, 1, sendfile(2) is available and supported)
 
 AC_CACHE_CHECK(for sync_file_range, ac_cv_sync_file_range, [AC_LINK_IFELSE([AC_LANG_SOURCE([
+#include <sys/types.h>
 #include <fcntl.h>
 int main (void)
 {
